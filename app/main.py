@@ -1,3 +1,10 @@
+import sys
+from pathlib import Path
+
+if __package__ is None or __package__ == "":
+    # Allow running this file directly (python app/main.py) during local debugging.
+    sys.path.append(str(Path(__file__).resolve().parents[1]))
+
 from app.api_client import JavaApiClient
 from app.chunker import TextChunker
 from app.db import DatabaseClient

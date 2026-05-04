@@ -4,6 +4,9 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import redis
+from requests import HTTPError
+from redis.exceptions import ConnectionError as RedisConnectionError
+from redis.exceptions import TimeoutError as RedisTimeoutError
 
 from app.api_client import JavaApiClient
 from app.chunker import TextChunker
@@ -40,6 +43,7 @@ class DocumentWorker:
         self.storage_client = storage_client
         self.redis_client = redis.from_url(settings.redis_url, decode_responses=True) if settings.worker_mode == "redis" else None
         self.polling_path = Path(settings.polling_job_file)
+        self._redis_unavailable_logged = False
 
     def run_forever(self) -> None:
         logger.info("worker_started mode=%s queue=%s", self.settings.worker_mode, self.settings.redis_queue_name)
@@ -51,9 +55,35 @@ class DocumentWorker:
 
     def _get_next_job(self) -> JobPayload | None:
         if self.settings.worker_mode == "redis":
-            result = self.redis_client.brpop(self.settings.redis_queue_name, timeout=5) if self.redis_client else None
-            if not result:
+            try:
+                result = self.redis_client.brpop(self.settings.redis_queue_name, timeout=5) if self.redis_client else None
+            except (RedisConnectionError, RedisTimeoutError):
+                if not self._redis_unavailable_logged:
+                    logger.warning(
+                        "redis_unavailable redis_url=%s queue=%s fallback=polling",
+                        self.settings.redis_url,
+                        self.settings.redis_queue_name,
+                    )
+                    self._redis_unavailable_logged = True
+
+                payload = read_json_line(self.polling_path)
+                if payload:
+                    return self._parse_job(payload)
+
+                time.sleep(self.settings.polling_interval_seconds)
                 return None
+
+            if self._redis_unavailable_logged:
+                logger.info("redis_recovered redis_url=%s", self.settings.redis_url)
+                self._redis_unavailable_logged = False
+
+            if not result:
+                # Optional local fallback for ad-hoc jobs while keeping Redis as primary queue.
+                payload = read_json_line(self.polling_path)
+                if payload:
+                    return self._parse_job(payload)
+                return None
+
             _, payload = result
             return self._parse_job(payload)
 
@@ -73,6 +103,28 @@ class DocumentWorker:
             try:
                 self._process(job)
                 return
+            except HTTPError as exc:
+                status_code = exc.response.status_code if exc.response is not None else None
+                if status_code is not None and 400 <= status_code < 500 and status_code != 429:
+                    logger.error(
+                        "job_processing_failed_non_retriable document_id=%s status_code=%s response=%s",
+                        job.document_id,
+                        status_code,
+                        (exc.response.text or "")[:500] if exc.response is not None else "",
+                    )
+                    self._mark_failed(job.document_id, f"HTTP {status_code}: client error from Java API")
+                    return
+
+                logger.exception(
+                    "job_processing_failed document_id=%s attempt=%s/%s",
+                    job.document_id,
+                    attempt,
+                    self.settings.max_retries,
+                )
+                if attempt >= self.settings.max_retries:
+                    self._mark_failed(job.document_id, str(exc))
+                    return
+                time.sleep(min(attempt * 2, 10))
             except Exception as exc:
                 logger.exception(
                     "job_processing_failed document_id=%s attempt=%s/%s",

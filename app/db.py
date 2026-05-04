@@ -1,19 +1,37 @@
 from contextlib import contextmanager
 from typing import Iterator
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from psycopg2 import pool
 from psycopg2.extras import execute_values
 
-from app.chunker import DocumentChunk
+try:
+    from app.chunker import DocumentChunk
+except ModuleNotFoundError:
+    from chunker import DocumentChunk
 
 
 class DatabaseClient:
     def __init__(self, dsn: str, connect_timeout_seconds: int = 10) -> None:
+        normalized_dsn = self._normalize_dsn(dsn, connect_timeout_seconds)
         self.connection_pool = pool.SimpleConnectionPool(
             minconn=1,
             maxconn=4,
-            dsn=f"{dsn}?connect_timeout={connect_timeout_seconds}" if "?" not in dsn else f"{dsn}&connect_timeout={connect_timeout_seconds}",
+            dsn=normalized_dsn,
         )
+
+    @staticmethod
+    def _normalize_dsn(dsn: str, connect_timeout_seconds: int) -> str:
+        parsed = urlsplit(dsn)
+        if parsed.scheme not in {"postgresql", "postgres"}:
+            return dsn
+
+        params = [(key, value) for key, value in parse_qsl(parsed.query, keep_blank_values=True) if key.lower() != "pgbouncer"]
+
+        params = [(key, value) for key, value in params if key.lower() != "connect_timeout"]
+        params.append(("connect_timeout", str(connect_timeout_seconds)))
+
+        return urlunsplit((parsed.scheme, parsed.netloc, parsed.path, urlencode(params), parsed.fragment))
 
     @contextmanager
     def connection(self) -> Iterator:

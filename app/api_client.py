@@ -2,6 +2,13 @@ import requests
 
 
 class JavaApiClient:
+    STATUS_MAP = {
+        "UPLOADED": 1,
+        "PROCESSING": 2,
+        "PROCESSED": 3,
+        "FAILED": 4,
+    }
+
     def __init__(self, base_url: str, timeout_seconds: int, token: str | None = None) -> None:
         self.base_url = base_url.rstrip("/")
         self.timeout_seconds = timeout_seconds
@@ -11,11 +18,13 @@ class JavaApiClient:
             self.session.headers.update({"Authorization": f"Bearer {token}"})
 
     def update_document_status(self, document_id: int, status: str, error_message: str | None = None) -> None:
-        payload = {"status": status}
-        if error_message:
-            payload["error_message"] = error_message[:1000]
-        response = self.session.patch(
-            f"{self.base_url}/documents/{document_id}/status",
+        status_key = status.strip().upper()
+        if status_key not in self.STATUS_MAP:
+            raise ValueError(f"Unsupported status value: {status}")
+
+        payload = {"statusId": self.STATUS_MAP[status_key]}
+        response = self.session.put(
+            f"{self.base_url}/arquivos/{document_id}/status",
             json=payload,
             timeout=self.timeout_seconds,
         )
