@@ -25,6 +25,12 @@ def main() -> None:
         base_url=settings.java_api_base_url,
         timeout_seconds=settings.java_api_timeout_seconds,
         token=settings.java_api_token,
+        status_map={
+            "UPLOADED": settings.status_id_uploaded,
+            "PROCESSING": settings.status_id_processing,
+            "PROCESSED": settings.status_id_processed,
+            "FAILED": settings.status_id_failed,
+        },
     )
     processor = DocumentProcessor(tesseract_cmd=settings.tesseract_cmd)
     chunker = TextChunker(max_tokens=settings.chunk_max_tokens)

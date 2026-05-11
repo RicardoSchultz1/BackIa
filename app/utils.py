@@ -22,6 +22,10 @@ class Settings:
     java_api_base_url: str
     java_api_timeout_seconds: int
     java_api_token: str | None
+    status_id_uploaded: int
+    status_id_processing: int
+    status_id_processed: int
+    status_id_failed: int
     supabase_url: str | None
     supabase_api_key: str | None
     supabase_storage_bucket: str | None
@@ -30,6 +34,8 @@ class Settings:
     db_connect_timeout_seconds: int
     embedding_model_name: str
     embedding_batch_size: int
+    qa_default_top_k: int
+    qa_max_top_k: int
     chunk_max_tokens: int
     tesseract_cmd: str | None
     log_level: str
@@ -49,6 +55,10 @@ def get_settings() -> Settings:
         java_api_base_url=os.getenv("JAVA_API_BASE_URL", "http://localhost:8080").rstrip("/"),
         java_api_timeout_seconds=int(os.getenv("JAVA_API_TIMEOUT_SECONDS", "30")),
         java_api_token=os.getenv("JAVA_API_TOKEN") or None,
+        status_id_uploaded=int(os.getenv("STATUS_ID_UPLOADED", "1")),
+        status_id_processing=int(os.getenv("STATUS_ID_PROCESSING", "2")),
+        status_id_processed=int(os.getenv("STATUS_ID_PROCESSED", "3")),
+        status_id_failed=int(os.getenv("STATUS_ID_FAILED", "4")),
         supabase_url=(os.getenv("SUPABASE_URL") or "").rstrip("/") or None,
         supabase_api_key=os.getenv("SUPABASE_API_KEY") or None,
         supabase_storage_bucket=os.getenv("SUPABASE_STORAGE_BUCKET") or None,
@@ -57,6 +67,8 @@ def get_settings() -> Settings:
         db_connect_timeout_seconds=int(os.getenv("DB_CONNECT_TIMEOUT_SECONDS", "10")),
         embedding_model_name=os.getenv("EMBEDDING_MODEL_NAME", "all-MiniLM-L6-v2"),
         embedding_batch_size=int(os.getenv("EMBEDDING_BATCH_SIZE", "16")),
+        qa_default_top_k=int(os.getenv("QA_DEFAULT_TOP_K", "5")),
+        qa_max_top_k=int(os.getenv("QA_MAX_TOP_K", "10")),
         chunk_max_tokens=int(os.getenv("CHUNK_MAX_TOKENS", "500")),
         tesseract_cmd=os.getenv("TESSERACT_CMD") or None,
         log_level=os.getenv("LOG_LEVEL", "INFO").upper(),

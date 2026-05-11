@@ -14,7 +14,7 @@ from app.db import DatabaseClient
 from app.embedding import EmbeddingService
 from app.processor import DocumentProcessor
 from app.storage_client import SupabaseStorageClient
-from app.utils import Settings, compute_text_hash, logger, read_json_line, resolve_file_path
+from app.utils import Settings, logger, read_json_line, resolve_file_path
 
 
 @dataclass(frozen=True)
@@ -158,13 +158,11 @@ class DocumentWorker:
             if not extracted_text.strip():
                 raise ValueError("No text could be extracted from the document")
 
-            content_hash = compute_text_hash(extracted_text)
             chunks = self.chunker.chunk(segments)
             embeddings = self.embedding_service.embed([chunk.chunk_text for chunk in chunks])
 
             # Replace previous chunks atomically so reprocessing does not create duplicates.
             self.db_client.replace_document_chunks(job.document_id, chunks, embeddings)
-            self.api_client.complete_document(job.document_id, content_hash=content_hash, chunk_count=len(chunks))
             self.api_client.update_document_status(job.document_id, "PROCESSED")
             logger.info(
                 "document_processing_completed document_id=%s chunks=%s",

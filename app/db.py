@@ -1,4 +1,6 @@
 from contextlib import contextmanager
+from datetime import datetime, timezone
+from dataclasses import dataclass
 from typing import Iterator
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
@@ -9,6 +11,27 @@ try:
     from app.chunker import DocumentChunk
 except ModuleNotFoundError:
     from chunker import DocumentChunk
+
+
+@dataclass(frozen=True)
+class RetrievedChunk:
+    document_id: int
+    chunk_index: int
+    page_number: int | None
+    chunk_text: str
+    similarity: float
+    arquivo_nome: str | None = None
+    arquivo_path: str | None = None
+
+
+@dataclass(frozen=True)
+class DocumentSearchResult:
+    document_id: int
+    arquivo_nome: str | None
+    arquivo_path: str | None
+    max_similarity: float
+    avg_similarity: float
+    chunk_count: int
 
 
 class DatabaseClient:
@@ -61,6 +84,8 @@ class DatabaseClient:
                 chunk.chunk_text,
                 chunk.page_number,
                 self._vector_literal(embedding),
+                datetime.now(timezone.utc),
+                datetime.now(timezone.utc),
             )
             for chunk, embedding in zip(chunks, embeddings)
         ]
@@ -78,15 +103,94 @@ class DatabaseClient:
                             chunk_index,
                             chunk_text,
                             page_number,
-                            embedding
+                            embedding,
+                            created_at,
+                            updated_at
                         ) VALUES %s
                         """,
                         values,
-                        template="(%s, %s, %s, %s, %s::vector)",
+                        template="(%s, %s, %s, %s, %s::vector, %s, %s)",
                     )
 
     def close(self) -> None:
         self.connection_pool.closeall()
+
+    def search_similar_chunks(
+        self,
+        query_embedding: list[float],
+        top_k: int,
+        document_id: int | None = None,
+    ) -> list[RetrievedChunk]:
+        vector = self._vector_literal(query_embedding)
+        sql = """
+            SELECT
+                dc.document_id,
+                dc.chunk_index,
+                dc.page_number,
+                dc.chunk_text,
+                (1 - (dc.embedding <=> %s::vector))::float AS similarity,
+                a.nome,
+                a.path
+            FROM document_chunks dc
+            LEFT JOIN arquivo a ON dc.document_id = a.id
+            WHERE (%s IS NULL OR dc.document_id = %s)
+            ORDER BY dc.embedding <=> %s::vector
+            LIMIT %s
+        """
+        with self.connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(sql, (vector, document_id, document_id, vector, top_k))
+                rows = cursor.fetchall()
+
+        return [
+            RetrievedChunk(
+                document_id=row[0],
+                chunk_index=row[1],
+                page_number=row[2],
+                chunk_text=row[3],
+                similarity=float(row[4]),
+                arquivo_nome=row[5],
+                arquivo_path=row[6],
+            )
+            for row in rows
+        ]
+
+    def search_documents_by_description(
+        self,
+        query_embedding: list[float],
+        limit: int = 10,
+    ) -> list[DocumentSearchResult]:
+        vector = self._vector_literal(query_embedding)
+        sql = """
+            SELECT
+                dc.document_id,
+                a.nome,
+                a.path,
+                MAX((1 - (dc.embedding <=> %s::vector))::float) AS max_similarity,
+                AVG((1 - (dc.embedding <=> %s::vector))::float) AS avg_similarity,
+                COUNT(*) AS chunk_count
+            FROM document_chunks dc
+            LEFT JOIN arquivo a ON dc.document_id = a.id
+            GROUP BY dc.document_id, a.nome, a.path
+            ORDER BY max_similarity DESC, avg_similarity DESC
+            LIMIT %s
+        """
+        with self.connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(sql, (vector, vector, limit))
+                rows = cursor.fetchall()
+
+        return [
+            DocumentSearchResult(
+                document_id=row[0],
+                arquivo_nome=row[1],
+                arquivo_path=row[2],
+                max_similarity=float(row[3]),
+                avg_similarity=float(row[4]),
+                chunk_count=int(row[5]),
+            )
+            for row in rows
+        ]
 
     @staticmethod
     def _vector_literal(embedding: list[float]) -> str:
