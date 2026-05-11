@@ -112,13 +112,15 @@ function Start-ProcessWindow {
     )
 
     $escapedRepoRoot = $repoRoot.Replace("'", "''")
+    $escapedTitle = $Title.Replace("'", "''")
     $escapedCommand = $Command.Replace("'", "''")
     $fullCommand = "Set-Location '$escapedRepoRoot'; & '$venvPython' $escapedCommand"
+    $windowCommand = "`$Host.UI.RawUI.WindowTitle = '$escapedTitle'; $fullCommand"
 
     Start-Process powershell -ArgumentList @(
         "-NoExit",
         "-ExecutionPolicy", "Bypass",
-        "-Command", "$Host.UI.RawUI.WindowTitle = '$Title'; $fullCommand"
+        "-Command", $windowCommand
     ) | Out-Null
 }
 
