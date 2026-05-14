@@ -38,6 +38,7 @@ _db_client = DatabaseClient(_settings.database_url, _settings.db_connect_timeout
 _embedding_service = EmbeddingService(
     model_name=_settings.embedding_model_name,
     batch_size=_settings.embedding_batch_size,
+    device=_settings.embedding_device,
 )
 _qa_service = QASearchService(
     db_client=_db_client,
@@ -45,6 +46,12 @@ _qa_service = QASearchService(
     default_top_k=_settings.qa_default_top_k,
     max_top_k=_settings.qa_max_top_k,
 )
+
+
+def _build_public_url(path: str) -> str:
+    if _settings.public_api_base_url:
+        return f"{_settings.public_api_base_url}{path}"
+    return path
 
 
 @app.get("/health")
@@ -69,7 +76,7 @@ def ask(request: AskRequest) -> AskResponse:
     for source in result.sources:
         source_dict = asdict(source)
         if source.arquivo_path:
-            source_dict["download_url"] = f"/download/{source.document_id}"
+            source_dict["download_url"] = _build_public_url(f"/download/{source.document_id}")
         sources_with_download.append(source_dict)
 
     return AskResponse(
@@ -125,7 +132,7 @@ def search(request: SearchRequest) -> SearchResponse:
     for result in results:
         doc_dict = asdict(result)
         if result.arquivo_path:
-            doc_dict["download_url"] = f"/download/{result.document_id}"
+            doc_dict["download_url"] = _build_public_url(f"/download/{result.document_id}")
         documents.append(doc_dict)
 
     return SearchResponse(documents=documents)

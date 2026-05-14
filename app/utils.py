@@ -34,6 +34,8 @@ class Settings:
     db_connect_timeout_seconds: int
     embedding_model_name: str
     embedding_batch_size: int
+    embedding_device: str
+    public_api_base_url: str | None
     qa_default_top_k: int
     qa_max_top_k: int
     chunk_max_tokens: int
@@ -67,6 +69,8 @@ def get_settings() -> Settings:
         db_connect_timeout_seconds=int(os.getenv("DB_CONNECT_TIMEOUT_SECONDS", "10")),
         embedding_model_name=os.getenv("EMBEDDING_MODEL_NAME", "all-MiniLM-L6-v2"),
         embedding_batch_size=int(os.getenv("EMBEDDING_BATCH_SIZE", "16")),
+        embedding_device=os.getenv("EMBEDDING_DEVICE", "auto").strip().lower(),
+        public_api_base_url=(os.getenv("PUBLIC_API_BASE_URL") or "").rstrip("/") or None,
         qa_default_top_k=int(os.getenv("QA_DEFAULT_TOP_K", "5")),
         qa_max_top_k=int(os.getenv("QA_MAX_TOP_K", "10")),
         chunk_max_tokens=int(os.getenv("CHUNK_MAX_TOKENS", "500")),

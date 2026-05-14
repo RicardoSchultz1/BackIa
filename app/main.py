@@ -37,6 +37,7 @@ def main() -> None:
     embedding_service = EmbeddingService(
         model_name=settings.embedding_model_name,
         batch_size=settings.embedding_batch_size,
+        device=settings.embedding_device,
     )
     storage_client = None
     if settings.supabase_url and settings.supabase_api_key and settings.supabase_storage_bucket:

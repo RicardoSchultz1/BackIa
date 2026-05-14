@@ -1,4 +1,6 @@
 import mimetypes
+import shutil
+import sys
 from pathlib import Path
 
 import pandas as pd
@@ -18,6 +20,17 @@ class DocumentProcessor:
     def __init__(self, tesseract_cmd: str | None = None) -> None:
         if tesseract_cmd:
             pytesseract.pytesseract.tesseract_cmd = tesseract_cmd
+            return
+
+        detected_cmd = shutil.which("tesseract")
+        if detected_cmd:
+            pytesseract.pytesseract.tesseract_cmd = detected_cmd
+            return
+
+        if sys.platform.startswith("win"):
+            windows_default = Path("C:/Program Files/Tesseract-OCR/tesseract.exe")
+            if windows_default.exists():
+                pytesseract.pytesseract.tesseract_cmd = str(windows_default)
 
     def extract_segments(self, file_path: Path) -> list[TextSegment]:
         file_type = self._detect_file_type(file_path)
